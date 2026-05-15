@@ -126,6 +126,7 @@ export interface RouteOption {
   polyline?: string;
   duration?: string;
   distance?: string;
+  steps?: string[];
 }
 
 export interface SafeRouteResponse {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuth, type AuthenticatedRequest } from '@/lib/auth/middleware';
-import { analyzeRouteSafety } from '@/lib/gemini/client';
+import { scorePreFetchedRoutes } from '@/lib/maps/route';
 import { db } from '@/lib/db/store';
 import type { SafeRouteRequest } from '@/types';
 
@@ -23,15 +23,19 @@ async function handler(req: AuthenticatedRequest) {
       hour12: true
     });
 
-    // Analyze routes using Gemini AI
-    const analysis = await analyzeRouteSafety(origin, destination, timeOfDay);
+    let routes = [];
+    if (body.routesData && Array.isArray(body.routesData)) {
+      routes = scorePreFetchedRoutes(body.routesData, timeOfDay);
+    } else {
+      return NextResponse.json({ error: 'routesData is required' }, { status: 400 });
+    }
 
     // Create a trip record
     const trip = db.trips.create({
       user_id: req.user!.id,
       origin,
       destination,
-      route_data: JSON.stringify(analysis),
+      route_data: JSON.stringify({ routes }),
       started_at: new Date().toISOString(),
       ended_at: null,
       status: 'active'
@@ -39,7 +43,7 @@ async function handler(req: AuthenticatedRequest) {
 
     return NextResponse.json({
       tripId: trip.id,
-      routes: analysis.routes
+      routes
     });
 
   } catch (error) {

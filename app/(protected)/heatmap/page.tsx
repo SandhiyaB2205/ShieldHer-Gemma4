@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Map, AlertTriangle, MapPin, RefreshCw, Layers } from 'lucide-react';
 import { Header } from '@/components/layout/header';
@@ -11,7 +11,7 @@ import { useGeolocation } from '@/hooks/use-geolocation';
 import { FadeIn } from '@/components/shared/page-transition';
 import { MapSkeleton } from '@/components/shared/skeleton-loader';
 import type { Report } from '@/types';
-
+import { useLoadScript, GoogleMap, Marker } from '@react-google-maps/api';
 export default function HeatmapPage() {
   const { getAuthHeaders } = useAuth();
   const { latitude, longitude, loading: locationLoading, refresh: refreshLocation } = useGeolocation();
@@ -19,6 +19,12 @@ export default function HeatmapPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showReports, setShowReports] = useState(true);
+
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
+  });
+
+  const center = useMemo(() => ({ lat: latitude || 0, lng: longitude || 0 }), [latitude, longitude]);
 
   useEffect(() => {
     async function fetchReports() {
@@ -66,21 +72,57 @@ export default function HeatmapPage() {
         {/* Map Placeholder */}
         <FadeIn>
           <GlassmorphismCard variant="strong" className="p-0 overflow-hidden">
-            <div className="relative h-64 bg-muted/30">
-              {isLoading || locationLoading ? (
+            <div className="relative h-[60vh] min-h-[400px] w-full bg-muted/30">
+              {isLoading || locationLoading || !isLoaded ? (
                 <MapSkeleton />
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <Map className="w-16 h-16 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground text-center px-4">
-                    Map visualization requires Google Maps API key
-                  </p>
+                <GoogleMap
+                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                  center={center}
+                  zoom={14}
+                  options={{
+                    disableDefaultUI: true,
+                    zoomControl: true,
+                    styles: [
+                      { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                      { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+                      { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                      { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                      { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                      { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#263c3f" }] },
+                      { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+                      { featureType: "road", elementType: "geometry", stylers: [{ color: "#38414e" }] },
+                      { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#212a37" }] },
+                      { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+                      { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#746855" }] },
+                      { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1f2835" }] },
+                      { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#f3d19c" }] },
+                      { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2f3948" }] },
+                      { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#d59563" }] },
+                      { featureType: "water", elementType: "geometry", stylers: [{ color: "#17263c" }] },
+                      { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#515c6d" }] },
+                      { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#17263c" }] }
+                    ]
+                  }}
+                >
                   {latitude && longitude && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Your location: {latitude.toFixed(4)}, {longitude.toFixed(4)}
-                    </p>
+                    <Marker 
+                      position={{ lat: latitude, lng: longitude }} 
+                      icon={{ url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }} 
+                    />
                   )}
-                </div>
+                  {showReports && reports.map(report => (
+                    <Marker
+                      key={report.id}
+                      position={{ lat: report.latitude, lng: report.longitude }}
+                      icon={{
+                        url: report.incident_type === 'safe_zone' 
+                          ? "http://maps.google.com/mapfiles/ms/icons/green-dot.png" 
+                          : "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+                      }}
+                    />
+                  ))}
+                </GoogleMap>
               )}
               
               {/* Map Controls */}
