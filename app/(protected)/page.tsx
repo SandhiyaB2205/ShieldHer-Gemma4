@@ -30,7 +30,7 @@ export default function HomePage() {
       try {
         const response = await fetch(
           `/api/safety-score?lat=${latitude}&lng=${longitude}`,
-          { headers: getAuthHeaders() }
+          { headers: getAuthHeaders() as HeadersInit }
         );
 
         if (response.ok) {
@@ -68,6 +68,7 @@ export default function HomePage() {
         </FadeIn>
 
         <FadeIn delay={0.2}>
+          
           <QuickActions />
         </FadeIn>
       </div>
