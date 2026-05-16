@@ -12,23 +12,24 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-      You are a fallback routing engine because the Google Maps API is currently restricted.
+      You are a smart routing engine.
       The user wants to drive from "${origin}" (Lat: ${originLat}, Lng: ${originLng}) to "${destination}" (Lat: ${destLat}, Lng: ${destLng}).
       
-      Generate a highly realistic driving route. 
+      Generate the best driving route.
       Return ONLY a valid JSON object (without any markdown formatting or \`\`\`json blocks) strictly matching this schema:
       {
-        "duration": "estimated time, e.g. 25 mins",
-        "distance": "estimated distance, e.g. 8.5 km",
+        "distance": "total estimated distance, e.g. 8.5 km",
+        "duration": "total estimated time, e.g. 25 mins",
+        "summary": "A brief 1-2 sentence summary of the route and its safety",
         "steps": [
-          "Head north on <b>[Street Name]</b>",
-          "Turn left onto <b>[Street Name]</b>",
-          "Arrive at destination"
-        ],
-        "waypoints": [
-           // Provide 2 to 4 intermediate realistic latitude and longitude coordinates between the origin and destination.
-           // This will be used to draw the path on the map so it isn't just a straight line.
-           { "lat": 13.08, "lng": 80.27 }
+          {
+            "instruction": "Head north on [Street Name]",
+            "distance": "200 m"
+          },
+          {
+            "instruction": "Turn left onto [Street Name]",
+            "distance": "1.2 km"
+          }
         ]
       }
     `;
