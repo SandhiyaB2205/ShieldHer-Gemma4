@@ -16,14 +16,14 @@ import type { RouteOption } from '@/types';
 
 export default function NavigatePage() {
   const { getAuthHeaders } = useAuth();
-  const { latitude, longitude, loading: locationLoading } = useGeolocation();
+  const [isNavigating, setIsNavigating] = useState(false);
+  const { latitude, longitude, loading: locationLoading } = useGeolocation({ watch: isNavigating });
   
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
-  const [isNavigating, setIsNavigating] = useState(false);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '',
@@ -31,9 +31,12 @@ export default function NavigatePage() {
   });
 
   const mapCenter = useMemo(() => {
+    // During active navigation, tightly lock center to user's moving location
+    if (isNavigating && latitude && longitude) return { lat: latitude, lng: longitude };
+    
     if (latitude && longitude) return { lat: latitude, lng: longitude };
     return { lat: 13.0827, lng: 80.2707 }; // Chennai
-  }, [latitude, longitude]);
+  }, [latitude, longitude, isNavigating]);
 
   const selectedPath = useMemo(() => {
     if (selectedRoute !== null && routes[selectedRoute]?.polyline && isLoaded && window.google) {
@@ -192,12 +195,12 @@ export default function NavigatePage() {
       <div className="px-4 py-4 space-y-4 max-w-lg mx-auto">
         <FadeIn>
           <GlassmorphismCard variant="strong" className="p-0 overflow-hidden mb-4">
-            <div className="relative h-[40vh] min-h-[300px] w-full bg-muted/30">
+            <div className={`relative w-full bg-muted/30 transition-all duration-500 ${isNavigating ? 'h-[60vh]' : 'h-[40vh] min-h-[300px]'}`}>
               {isLoaded ? (
                 <GoogleMap
                   mapContainerStyle={{ width: '100%', height: '100%' }}
                   center={mapCenter}
-                  zoom={selectedPath.length > 0 ? 12 : 11}
+                  zoom={isNavigating ? 18 : (selectedPath.length > 0 ? 12 : 11)}
                   options={{
                     disableDefaultUI: true,
                     zoomControl: true,
@@ -233,68 +236,70 @@ export default function NavigatePage() {
             </div>
           </GlassmorphismCard>
 
-          <GlassmorphismCard variant="strong" className="space-y-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <NavigationIcon className="w-5 h-5 text-primary" />
-              Find Safe Route
-            </h2>
+          {!isNavigating && (
+            <GlassmorphismCard variant="strong" className="space-y-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <NavigationIcon className="w-5 h-5 text-primary" />
+                Find Safe Route
+              </h2>
 
-            {/* Origin Input */}
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">From</label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
+              {/* Origin Input */}
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">From</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Enter starting point"
+                      value={origin}
+                      onChange={(e) => setOrigin(e.target.value)}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={useCurrentLocation}
+                    disabled={locationLoading}
+                  >
+                    <MapPin className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Destination Input */}
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">To</label>
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Enter starting point"
-                    value={origin}
-                    onChange={(e) => setOrigin(e.target.value)}
+                    placeholder="Enter destination"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value)}
                     className="pl-10 bg-background/50"
                   />
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={useCurrentLocation}
-                  disabled={locationLoading}
-                >
-                  <MapPin className="w-4 h-4" />
-                </Button>
               </div>
-            </div>
 
-            {/* Destination Input */}
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">To</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Enter destination"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                  className="pl-10 bg-background/50"
-                />
-              </div>
-            </div>
-
-            <Button
-              onClick={findSafeRoute}
-              disabled={isLoading || !origin || !destination}
-              className="w-full bg-gradient-to-r from-primary to-primary/80"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analyzing routes...
-                </>
-              ) : (
-                <>
-                  <Shield className="w-4 h-4 mr-2" />
-                  Find Safest Route
-                </>
-              )}
-            </Button>
-          </GlassmorphismCard>
+              <Button
+                onClick={findSafeRoute}
+                disabled={isLoading || !origin || !destination}
+                className="w-full bg-gradient-to-r from-primary to-primary/80"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Analyzing routes...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4 mr-2" />
+                    Find Safest Route
+                  </>
+                )}
+              </Button>
+            </GlassmorphismCard>
+          )}
         </FadeIn>
 
         {/* Route Results */}
@@ -340,19 +345,38 @@ export default function NavigatePage() {
                         </p>
                       </div>
                       
-                      <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                      <ArrowRight className={`w-5 h-5 text-muted-foreground transition-transform ${selectedRoute === index ? 'rotate-90' : ''}`} />
                     </div>
+                    
+                    {/* Expand to show directions if selected */}
+                    {selectedRoute === index && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        className="mt-4 pt-4 border-t border-border/50"
+                      >
+                        <h4 className="text-sm font-semibold mb-2 text-foreground">Directions</h4>
+                        <div className="space-y-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                          {route.steps?.map((step, idx) => (
+                             <div key={idx} className="text-xs text-muted-foreground flex items-start gap-2 bg-background/50 p-2 rounded-md">
+                               <span className="font-medium text-primary mt-0.5">{idx + 1}.</span>
+                               <span dangerouslySetInnerHTML={{ __html: step }} className="leading-tight" />
+                             </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
                   </GlassmorphismCard>
                 </motion.div>
               ))}
 
               {selectedRoute !== null && (
                 <Button 
-                  className="w-full bg-gradient-to-r from-safe to-safe/80"
+                  className="w-full bg-gradient-to-r from-safe to-safe/80 shadow-lg shadow-safe/20"
                   onClick={() => setIsNavigating(true)}
                 >
                   <NavigationIcon className="w-4 h-4 mr-2" />
-                  Start Navigation
+                  Start Active Navigation
                 </Button>
               )}
             </div>
