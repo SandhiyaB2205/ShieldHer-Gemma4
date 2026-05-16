@@ -78,6 +78,7 @@ export function scorePreFetchedRoutes(routesData: any[], timeOfDay: string): Rou
       duration: route.duration || '',
       distance: route.distance || '',
       polyline: route.polyline || '',
+      steps: route.steps || [],
       originalIndex: index // Keep track so frontend knows which map route it maps to
     };
   });
