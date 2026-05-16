@@ -1,4 +1,4 @@
-const key = 'AIzaSyDlNb9NIlQznKGmSEDA9hwQKfd6qAREVFA';
+const key = 'AIzaSyAWkvbNv4UaZocQGaxMVoGtcLxYM7qIsxg';
 const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
 
 async function run() {
