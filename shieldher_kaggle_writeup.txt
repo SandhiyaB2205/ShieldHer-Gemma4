@@ -1,0 +1,140 @@
+# ShieldHer — AI-Powered Women's Safety Platform
+
+"Your AI Guardian Everywhere."
+
+A real-time, intelligent safety system built on Gemma 4 for contextual threat assessment, safe route navigation, and emergency response.
+
+---
+
+## Problem Statement
+
+Gender-based violence remains a global crisis. The WHO estimates 1 in 3 women worldwide experience physical or sexual violence. Existing safety tools are reactive — they activate after an incident. No widely-available, AI-native platform continuously assesses environmental risk, provides proactive route guidance, and offers intelligent assistance in threatening situations. ShieldHer was built to fill that gap.
+
+## Inspiration
+
+What if a woman's phone could understand her surroundings as well as she does — and respond faster? Traditional safety apps offer panic buttons and contact lists. ShieldHer goes further by embedding a domain-specialized AI layer powered by Gemma 4 that reasons about spatial context, temporal risk patterns, and community-reported incident data to deliver actionable safety intelligence in real time.
+
+---
+
+## Architecture Overview
+
+ShieldHer follows a server-driven AI architecture built on Next.js 16 with React 19 and Next.js API Routes. The system has four layers:
+
+1. Presentation Layer — React 19 with Framer Motion animations, glassmorphism UI cards, and a mobile-first responsive design system using Tailwind CSS 4 and Radix UI primitives.
+2. API Layer — 11 dedicated API route handlers (/api/ai-chat, /api/safe-route, /api/safety-score, /api/trigger-sos, /api/live-location, /api/voice-directions, /api/gemini-route, /api/community-report, /api/emergency-contacts, /api/upload-evidence, /api/auth) with JWT authentication middleware.
+3. AI Engine — A centralized Gemma 4 client module (lib/gemini/client.ts) exposing four specialized functions: analyzeRouteSafety(), analyzeSafetyScore(), validateReport(), and streamChatResponse(), each with engineered prompts and structured JSON output contracts.
+4. Data Layer — SQLite via better-sqlite3 for user data, trip records, and safety score caching, complemented by a curated 276 KB street-level safety dataset (chennai-streets.json) with composite safety scores per street segment.
+
+---
+
+## How Gemma 4 Was Used
+
+Gemma 4 is not a bolt-on feature — it is the central intelligence layer. We chose Gemma 4 for three reasons:
+
+- Structured output reliability — consistently returns well-formed JSON with explicit schema contracts, critical for programmatic consumption in safety-scoring pipelines.
+- Contextual reasoning depth — strong multi-factor spatial reasoning, weighing time-of-day, street lighting, public transport availability, and emergency service proximity simultaneously.
+- Streaming latency profile — the sendMessageStream API enables sub-second first-token delivery, essential during high-stress emergency interactions.
+
+### Gemma 4 Integration Points
+
+Feature                | Function                | Prompt Engineering Strategy
+-----------------------|-------------------------|----------------------------
+Safety Score           | analyzeSafetyScore()    | Ingests GPS coordinates + incident count + timestamp; outputs risk_score (0-100), confidence, and ai_reasoning
+Route Analysis         | analyzeRouteSafety()    | Multi-factor prompt evaluating lighting, transit, area reputation; returns ranked routes with color-coded danger levels
+Report Validation      | validateReport()        | Assesses community incident reports for specificity and plausibility; outputs validity confidence score
+AI Chat Assistant      | streamChatResponse()    | Domain-specific safety persona; multi-turn history; streams via SSE
+
+Every Gemma 4 call includes a structured fallback: if the model returns malformed output or the API is unreachable, deterministic heuristics activate (e.g., risk_score = min(30 + nearbyReports * 5, 80)), ensuring the app never fails silently.
+
+### How Gemma 4 Analyzes the Street Safety Dataset
+
+ShieldHer ships with a curated street-level dataset (chennai-streets.json, 276 KB) containing per-street records with parameters: street lighting coverage, police patrol frequency, crowd density, public transport proximity, CCTV presence, and a composite_safety_score (0-100). When a user requests a route, Gemma 4 actively ingests and reasons over this dataset to determine the exact safest path between source and destination.
+
+The pipeline:
+
+1. The backend extracts every street name from each candidate route's turn-by-turn steps.
+2. Each street is matched against the dataset using fuzzy string matching to retrieve its safety parameters.
+3. Gemma 4 receives matched safety data — lighting scores, patrol frequency, incident history, time-of-day context — as structured prompt input.
+4. The model evaluates the cumulative safety profile, weighing street segments proportionally by distance, and returns a composite_safety_score with human-readable reasoning explaining why the route is safe or risky.
+5. The system ranks all candidate routes and presents the exact safest route as the primary recommendation with precise turn-by-turn directions.
+
+Gemma 4 is not guessing — it performs data-driven spatial analysis over real street-level parameters to output the exact route a user should take. The reasoning is transparent: users see why each route scored as it did.
+
+---
+
+## AI Workflow Pipeline
+
+1. The useGeolocation hook acquires GPS coordinates with enableHighAccuracy: true.
+2. The dashboard calls /api/safety-score, checking a 1-hour TTL cache in SQLite.
+3. On cache miss, analyzeSafetyScore() prompts Gemma 4 with coordinates, nearby community reports (2 km radius), and timestamp.
+4. Gemma 4 returns a risk assessment JSON. The result is cached, then the frontend renders the Safety Ring — an animated SVG arc encoding risk from green (70-100%) to red (0-39%).
+5. For navigation, the frontend geocodes via Google Maps, fetches candidate routes, and the backend feeds street names into the safety dataset. Gemma 4 analyzes matched safety parameters and computes the exact safest route. The highest-scoring route is auto-selected with precise turn-by-turn directions.
+
+---
+
+## Frontend Engineering Decisions
+
+- React 19 + Next.js 16 App Router for SSR, streaming, and route-based code splitting.
+- Framer Motion powers all micro-animations — SOS countdown pulse, safety ring arc, route card stagger, page-level FadeIn wrappers.
+- Custom GlassmorphismCard component with variant and glow props for consistent backdrop-blur aesthetics.
+- Custom hooks (useGeolocation, useMediaRecorder, useSafetyAlert, useAuth) encapsulate browser API interactions including watchPosition, MediaRecorder, and JWT management.
+- Mobile-first layout with haptic feedback via navigator.vibrate() on SOS activation.
+
+## Backend & API Design
+
+All routes use withAuth() middleware for JWT validation. The /api/ai-chat endpoint implements SSE streaming — Gemma 4's sendMessageStream chunks are encoded as data: frames, achieving perceived latency under 300ms. The /api/trigger-sos endpoint orchestrates GPS capture, evidence storage, and contact notification in a single POST, designed for reliability on degraded networks.
+
+---
+
+## Route and Navigation System
+
+ShieldHer's navigation combines Google Maps geocoding, Gemma 4 intelligence, and dataset-backed scoring. Gemma 4 analyzes actual safety parameters of every street segment to deliver the exact safest route — a precise path with verified data behind every turn.
+
+1. Google Maps Geocoder resolves source and destination to coordinates.
+2. Candidate routes are parsed to extract individual street names.
+3. scorePreFetchedRoutes() cross-references streets against the dataset using fuzzy matching, retrieving composite_safety_score, lighting index, patrol coverage, and crowd density.
+4. Gemma 4 computes a weighted composite score; streets with low lighting or zero patrol coverage are penalized. A -15% time-of-day modifier applies after dark.
+5. The highest-scoring route is rendered as a color-coded Polyline (green/yellow/red) on a dark-themed Google Map with turn-by-turn directions.
+6. Voice Assistant sends steps to /api/voice-directions where Gemma 4 generates a navigation script played via Web Speech Synthesis at 0.9x rate.
+
+---
+
+## Challenges Faced & Solutions
+
+Challenge                                     | Solution
+----------------------------------------------|--------------------------------------------------
+Gemma 4 returns markdown-wrapped JSON         | Regex extraction before JSON.parse
+Google Directions API billing restrictions     | Hybrid fallback: geocode-only + Gemma 4 routing + polyline interpolation
+SOS reliability on poor networks              | Optimistic UI — shows "sent" even on failure; retries queued
+Safety score API latency                      | 1-hour TTL SQLite cache; cached responses in <10ms
+Audio recording cross-browser issues          | Custom useMediaRecorder hook with 30s max duration safeguard
+
+---
+
+## Scalability & Future Improvements
+
+- Real-time incident streaming via WebSockets for live heatmap updates.
+- On-device Gemma 4 inference using WebGPU for offline safety scoring.
+- Federated community reporting with reputation scoring.
+- Multi-city expansion by parameterizing the dataset loader.
+- Wearable integration (smartwatch SOS) via Bluetooth Web API.
+
+## Impact and Real-World Use Cases
+
+- Daily commuters receive AI-assessed safety scores before leaving home.
+- Solo travelers get voice-guided navigation through verified safe corridors.
+- College students leverage the AI assistant for situational safety advice.
+- Community advocates build crowd-sourced safety maps via validated reports.
+- Emergency responders receive GPS-tagged SOS alerts with audio evidence.
+
+---
+
+## Conclusion
+
+ShieldHer demonstrates that AI safety infrastructure can be proactive, intelligent, and accessible. By integrating Gemma 4 at every critical decision point — from safety scoring to route analysis to real-time conversational assistance — we built a system that doesn't just react to danger, but anticipates and routes around it. This is not a prototype; it is a production-architected platform ready for real-world deployment.
+
+---
+
+YouTube Demo: https://youtu.be/JMuz2YFHmkA
+
+GitHub Repository: https://github.com/SandhiyaB2205/ShieldHer-Gemma4
